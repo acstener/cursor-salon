@@ -28,6 +28,9 @@ export function SalonForm({
   const [uploadedFiles, setUploadedFiles] = useState<{file: File, storageId: Id<"_storage"> | null, uploading: boolean}[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState<{imageUrl: string, storageId: Id<"_storage">} | null>(null);
+  const [backViewImage, setBackViewImage] = useState<{imageUrl: string, storageId: Id<"_storage">} | null>(null);
+  const [isGeneratingBackView, setIsGeneratingBackView] = useState(false);
+  const [showingBackView, setShowingBackView] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [currentStep, setCurrentStep] = useState<'upload' | 'salon-transform' | 'styling'>("upload");
   const [salonImage, setSalonImage] = useState<{imageUrl: string, storageId: Id<"_storage">} | null>(null);
@@ -67,7 +70,7 @@ export function SalonForm({
     const selectedHaircutData = allHaircuts.find(h => h.value === selectedHaircut)!;
     const selectedColorData = colorOptions.find(c => c.value === selectedColor)!;
     
-    return `Transform this person in the salon chair to have: ${selectedHaircutData.description.toLowerCase()} ${selectedColorData.description.toLowerCase()}. Keep them in the same salon setting with the cape, just change their hairstyle and color. Make it photorealistic, professional salon result.`;
+    return `Transform this person in the salon chair to have: ${selectedHaircutData.description.toLowerCase()} ${selectedColorData.description.toLowerCase()}. Keep them in the same salon setting with the cape, just change their hairstyle and color. Show them from the FRONT VIEW, facing forward. Make it photorealistic, professional salon result.`;
   };
 
   const handleFileUpload = async (file: File) => {
@@ -158,17 +161,51 @@ export function SalonForm({
       
       const masterPrompt = generateMasterPrompt();
       
+      console.log("Generating front view with prompt:", masterPrompt);
+      
       const output = await generateImage({
         prompt: masterPrompt,
         storageIds: [salonImage.storageId],
       });
       
+      console.log("Front view generated:", output.storageId);
       // Replace the display image with the new styled result
       setResult(output);
+      // Reset back view when new style is generated
+      setBackViewImage(null);
+      setShowingBackView(false);
+      console.log("State reset: showingBackView = false");
     } catch (error) {
       console.error("Error generating styled image:", error);
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const generateBackView = async () => {
+    if (!result) {
+      console.error("No result image available for back view generation");
+      return;
+    }
+    
+    try {
+      setIsGeneratingBackView(true);
+      console.log("Generating back view from result:", result.storageId);
+      
+      const backViewPrompt = `Transform this salon photo to show the exact same person from BEHIND/REAR VIEW. Show the back of their head and hairstyle while they're still sitting in the same salon chair wearing the same cape. The hairstyle should look identical from behind - same cut, same color, same styling. Keep the salon setting identical, just rotate the view 180 degrees to show the BACK OF THE HEAD. Professional salon photography, rear view mirror perspective.`;
+      
+      const output = await generateImage({
+        prompt: backViewPrompt,
+        storageIds: [result.storageId],
+      });
+      
+      console.log("Back view generated:", output.storageId);
+      setBackViewImage(output);
+      setShowingBackView(true);
+    } catch (error) {
+      console.error("Error generating back view:", error);
+    } finally {
+      setIsGeneratingBackView(false);
     }
   };
 
@@ -177,6 +214,8 @@ export function SalonForm({
     setUploadedFiles([]);
     setSalonImage(null);
     setResult(null);
+    setBackViewImage(null);
+    setShowingBackView(false);
     setIsGenerating(false);
   };
 
@@ -237,10 +276,20 @@ export function SalonForm({
     return (
       <div className={cn("grid gap-6", className)} {...props}>
         <MusicToggle />
+        
+        {/* Salon Hero Image */}
+        <div className="w-full max-w-4xl mx-auto mb-8">
+          <img 
+            src="/replicate-prediction-varmhtpwa5rm80cs6me8f8j4n4.jpeg" 
+            alt="CURSOR Barber & Salon - Modern professional salon interior"
+            className="w-full aspect-[16/10] object-cover rounded-xl shadow-2xl"
+          />
+        </div>
+        
         <div className="grid gap-2 text-center">
-          <h1 className="text-4xl font-bold">Welcome to AI Salon</h1>
+          <h1 className="text-4xl font-bold">Welcome to CURSOR Salon</h1>
           <p className="text-xl text-muted-foreground">
-            Upload your photo to get started
+            Step into our virtual salon and transform your look
           </p>
         </div>
 
@@ -388,39 +437,92 @@ export function SalonForm({
         {salonImage && (
           <Card>
             <CardHeader>
-              <CardTitle>{result ? "Your New Look" : "You in the Salon"}</CardTitle>
+              <CardTitle>
+                {showingBackView 
+                  ? "Back View - How's it Look?" 
+                  : result 
+                  ? "Your New Look" 
+                  : "You in the Salon"}
+              </CardTitle>
               <CardDescription>
-                {result ? "Looking amazing! Try another style?" : "Looking great! Now let's try some new styles"}
+                {showingBackView 
+                  ? "Just like the hairdresser's mirror!" 
+                  : result 
+                  ? "Looking amazing! Try another style?" 
+                  : "Looking great! Now let's try some new styles"}
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="relative">
                 <img
-                  src={result ? result.imageUrl : salonImage.imageUrl}
-                  alt={result ? "Your styled look" : "You in the salon"}
+                  src={
+                    showingBackView && backViewImage 
+                      ? backViewImage.imageUrl 
+                      : result 
+                      ? result.imageUrl 
+                      : salonImage.imageUrl
+                  }
+                  alt={
+                    showingBackView 
+                      ? "Back view of your styled look" 
+                      : result 
+                      ? "Your styled look" 
+                      : "You in the salon"
+                  }
                   className="w-full rounded-lg shadow"
                 />
-                {isGenerating && (
+                {(isGenerating || isGeneratingBackView) && (
                   <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
                     <div className="text-center text-white">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
-                      <p className="text-sm">Styling...</p>
+                      <p className="text-sm">{isGeneratingBackView ? "Getting the mirror..." : "Styling..."}</p>
                     </div>
                   </div>
                 )}
               </div>
               {result && !isGenerating && (
-                <div className="flex gap-2 mt-4">
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={result.imageUrl} target="_blank" rel="noopener noreferrer">
-                      Open Full Size
-                    </a>
-                  </Button>
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={result.imageUrl} download="ai-salon-result.jpg">
-                      Download
-                    </a>
-                  </Button>
+                <div className="space-y-3 mt-4">
+                  {/* Mirror/Back View Button */}
+                  <div className="flex justify-center">
+                    {!showingBackView ? (
+                      <Button 
+                        onClick={generateBackView}
+                        disabled={isGeneratingBackView}
+                        className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                      >
+                        {isGeneratingBackView ? "Getting Mirror..." : "🪞 Spin Round, View the Back"}
+                      </Button>
+                    ) : (
+                      <Button 
+                        onClick={() => setShowingBackView(false)}
+                        variant="outline"
+                        className="border-2 border-primary"
+                      >
+                        👋 Turn Back Around
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* Download Buttons */}
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" asChild>
+                      <a 
+                        href={showingBackView && backViewImage ? backViewImage.imageUrl : result.imageUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                      >
+                        Open Full Size
+                      </a>
+                    </Button>
+                    <Button variant="outline" size="sm" asChild>
+                      <a 
+                        href={showingBackView && backViewImage ? backViewImage.imageUrl : result.imageUrl} 
+                        download={`ai-salon-${showingBackView ? 'back' : 'front'}-view.jpg`}
+                      >
+                        Download {showingBackView ? "Back" : "Front"} View
+                      </a>
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -503,7 +605,7 @@ export function SalonForm({
                   disabled={isGenerating || !salonImage}
                   className="w-full"
                 >
-                  {isGenerating ? "Styling..." : "Apply This Style"}
+                  {isGenerating ? "Styling..." : "Try Out the Look"}
                 </Button>
               </div>
             </form>
